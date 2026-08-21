@@ -4,5 +4,8 @@ Kept separate from ``config.urls`` so that project-level concerns (admin,
 static files) stay distinct from the public API surface.
 """
 
+from django.urls import include, path
 
-urlpatterns = []
+urlpatterns = [
+    path("", include("apps.accounts.urls")),
+]
