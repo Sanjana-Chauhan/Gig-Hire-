@@ -90,6 +90,34 @@ class Application(TimeStampedModel):
         return self.status == ApplicationStatus.PENDING
 
 
+class ContractQuerySet(models.QuerySet):
+    """Query vocabulary for contracts.
+
+    ``active()`` exists so that other apps can ask "is this gig under contract?"
+    without importing anything from hiring. Django builds a reverse-relation
+    manager from the related model's default manager class, so ``ContractStatus``
+    knowledge stays entirely inside this app while remaining usable as:
+
+        gig.contracts.active().exists()
+
+    That matters for dependency direction. The gig lifecycle rules (rule 7's
+    delete guard, rule 8's transition preconditions) live in the gigs app and
+    need to know about contracts -- but hiring already imports gigs, so gigs
+    importing hiring would create a cycle. Exposing the concept as queryset
+    vocabulary lets gigs ask the question in hiring's own words while the
+    dependency graph stays one-way.
+    """
+
+    def active(self) -> "ContractQuerySet":
+        return self.filter(status=ContractStatus.ACTIVE)
+
+    def for_supplier(self, supplier) -> "ContractQuerySet":
+        return self.filter(supplier=supplier)
+
+    def for_creator(self, creator) -> "ContractQuerySet":
+        return self.filter(gig__creator=creator)
+
+
 class Contract(TimeStampedModel):
     """A binding agreement created when a creator accepts an application.
 
@@ -128,6 +156,8 @@ class Contract(TimeStampedModel):
         choices=ContractStatus.choices,
         default=ContractStatus.ACTIVE,
     )
+
+    objects = ContractQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at", "-id"]

@@ -4,7 +4,8 @@ from rest_framework import viewsets
 
 from apps.gigs.filters import GigFilterSet
 from apps.gigs.models import Gig
-from apps.gigs.serializers import GigSerializer
+from apps.gigs import transitions
+from apps.gigs.serializers import GigSerializer, GigUpdateSerializer
 
 
 class GigViewSet(viewsets.ModelViewSet):
@@ -36,3 +37,32 @@ class GigViewSet(viewsets.ModelViewSet):
     queryset = Gig.objects.all()
     serializer_class = GigSerializer
     filterset_class = GigFilterSet
+
+    def get_serializer_class(self):
+        """Use the update serializer for PATCH and PUT.
+
+        Status is read-only on create (every gig starts open) and writable on
+        update (rule 8 permits transitions). Selecting by action keeps each
+        serializer's field set static and readable, rather than having one class
+        whose behaviour depends on whether an instance is attached.
+        """
+        if self.action in {"update", "partial_update"}:
+            return GigUpdateSerializer
+        return GigSerializer
+
+    def perform_destroy(self, instance: Gig) -> None:
+        """Enforce business rule 7 before deleting.
+
+        The guard lives here rather than in a serializer because DELETE has no
+        serializer -- there is no payload to validate. Overriding
+        ``perform_destroy`` is DRF's designated seam for exactly this: a rule
+        that applies to the act of deleting rather than to any input.
+
+        Contract.gig is PROTECT, so even without this check the database would
+        refuse and the exception handler would turn it into a 409. This check
+        exists so the client gets a specific, actionable message instead of a
+        generic integrity error -- and so the ERROR log reserved for genuine
+        validation gaps is not triggered by ordinary, expected refusals.
+        """
+        transitions.assert_gig_deletable(gig=instance)
+        instance.delete()

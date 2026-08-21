@@ -58,3 +58,32 @@ class Gig(TimeStampedModel):
         change together if the definition ever widens.
         """
         return self.status == GigStatus.OPEN
+
+    @property
+    def has_active_contract(self) -> bool:
+        """Whether this gig is currently under contract.
+
+        Reads through the reverse relation using hiring's own queryset
+        vocabulary, so the gigs app never imports hiring and the dependency
+        graph stays acyclic. See ContractQuerySet.active().
+
+        This is the question behind business rule 7 (a gig with an active
+        contract cannot be deleted) and behind rule 8's transition
+        preconditions -- a gig must not be completed or cancelled out from under
+        a live agreement.
+        """
+        return self.contracts.active().exists()
+
+    @property
+    def has_contract_history(self) -> bool:
+        """Whether any contract has ever existed for this gig.
+
+        Distinct from has_active_contract, and the distinction is the whole of
+        ambiguity A5. Rule 7 only forbids deleting a gig with an *active*
+        contract -- read literally, a gig whose contract has been completed is
+        deletable, which would cascade away that contract and its reviews.
+        Since Contract.gig is PROTECT, that cascade cannot actually happen; this
+        property is what turns the database's refusal into a clean 409 with a
+        useful message.
+        """
+        return self.contracts.exists()
