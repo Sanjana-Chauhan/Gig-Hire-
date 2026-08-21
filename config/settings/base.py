@@ -54,7 +54,9 @@ THIRD_PARTY_APPS = [
     "django_filters",
 ]
 
-LOCAL_APPS = []
+LOCAL_APPS = [
+    "apps.common",
+]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
@@ -135,10 +137,18 @@ STATIC_ROOT = BASE_DIR / env("DJANGO_STATIC_ROOT", default="staticfiles")
 # ---------------------------------------------------------------------------
 # Django REST Framework
 # ---------------------------------------------------------------------------
+# Upper bound on a client-supplied ?page_size=. Read by
+# apps.common.pagination.DefaultPagination; kept as a plain Django setting
+# because DRF has no equivalent of its own.
+API_MAX_PAGE_SIZE = env.int("API_MAX_PAGE_SIZE", default=100)
+
 REST_FRAMEWORK = {
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "apps.common.pagination.DefaultPagination",
     "PAGE_SIZE": env.int("API_PAGE_SIZE", default=20),
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    # One handler renders every rule violation and keeps database errors from
+    # reaching clients raw. See apps.common.exceptions.
+    "EXCEPTION_HANDLER": "apps.common.exceptions.api_exception_handler",
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }
 
