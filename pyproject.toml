@@ -1,0 +1,48 @@
+# Tooling configuration for the GigHire service.
+#
+# pytest, coverage and their options live here rather than in separate ini
+# files so that there is one place to look for how the suite runs.
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+# -ra prints a short summary of every non-passing outcome.
+# --strict-markers turns a typo in a marker name into an error instead of a
+#   silently ignored marker, which would quietly disable traceability.
+# Coverage runs by default so that a bare `pytest` satisfies both "run the
+#   suite" and "show me coverage" without the reader needing extra flags.
+addopts = """
+    -ra
+    --strict-markers
+    --strict-config
+    --cov=apps
+    --cov-report=term-missing
+"""
+
+# Markers are declared explicitly. `rule` ties a test back to a numbered
+# business rule in the specification, which is what makes a requirements
+# traceability matrix possible.
+markers = [
+    "rule(identifier): links this test to a business rule from the specification",
+    "smoke: minimal end-to-end checks worth running before anything else",
+]
+
+[tool.coverage.run]
+source = ["apps"]
+branch = true
+omit = [
+    "*/migrations/*",
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

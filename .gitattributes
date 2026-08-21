@@ -1,0 +1,5 @@
+# Normalise line endings so the repository is identical for reviewers on any
+# platform, regardless of local core.autocrlf settings.
+* text=auto eol=lf
+*.png binary
+*.sqlite3 binary

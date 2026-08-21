@@ -1,0 +1,36 @@
+# Project instructions for AI tooling; not part of the submission.
+Claude.md
+CLAUDE.md
+
+# Environments
+.venv/
+venv/
+env/
+
+# Local configuration and secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.Python
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+*.log
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
