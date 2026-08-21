@@ -3,6 +3,7 @@
 from django.core.exceptions import ValidationError
 
 from apps.accounts.constants import MAX_SKILL_LENGTH, MAX_SKILLS_PER_SUPPLIER
+from apps.common.text import canonicalize_tag
 
 
 def validate_skill_list(value) -> None:
@@ -56,7 +57,7 @@ def normalize_skills(value: list[str]) -> list[str]:
     seen: set[str] = set()
     normalized: list[str] = []
     for skill in value:
-        canonical = skill.strip().lower()
+        canonical = canonicalize_tag(skill)
         if canonical not in seen:
             seen.add(canonical)
             normalized.append(canonical)
