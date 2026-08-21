@@ -3,7 +3,7 @@
 from rest_framework import serializers
 
 from apps.accounts.models import Supplier
-from apps.hiring.models import Application
+from apps.hiring.models import Application, Contract
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -62,3 +62,25 @@ class ApplyToGigSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
         fields = ["supplier_id", "proposed_rate"]
+
+
+class ContractSerializer(serializers.ModelSerializer):
+    """Read representation of a contract.
+
+    There is no write counterpart, deliberately. Contracts are created only by
+    accepting an application, so a client-facing create serializer would be an
+    invitation to bypass business rule 3.
+    """
+
+    class Meta:
+        model = Contract
+        fields = [
+            "id",
+            "gig",
+            "supplier",
+            "agreed_rate",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields

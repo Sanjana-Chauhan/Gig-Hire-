@@ -23,3 +23,20 @@ class ApplicationStatus(models.TextChoices):
     ACCEPTED = "accepted", "Accepted"
     REJECTED = "rejected", "Rejected"
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class ContractStatus(models.TextChoices):
+    """The lifecycle of a contract.
+
+    ``TERMINATED`` is declared because business rule 4 counts "non-completed,
+    non-terminated" contracts, so the rule itself refers to the state. No
+    endpoint in the specification can produce it, however -- there is no
+    terminate action. It is therefore currently unreachable through the API,
+    recorded as gap G4 in DECISIONS.md, and deliberately *not* given an invented
+    endpoint: implementing a feature the specification never asked for is a
+    worse failure than reporting the gap.
+    """
+
+    ACTIVE = "active", "Active"
+    COMPLETED = "completed", "Completed"
+    TERMINATED = "terminated", "Terminated"

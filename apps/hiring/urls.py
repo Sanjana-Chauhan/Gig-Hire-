@@ -11,7 +11,11 @@ These patterns cannot collide with the gig router: DefaultRouter matches
 
 from django.urls import path
 
-from apps.hiring.views import ApplyToGigView, GigApplicationListView
+from apps.hiring.views import (
+    AcceptApplicationView,
+    ApplyToGigView,
+    GigApplicationListView,
+)
 
 urlpatterns = [
     path("gigs/<int:gig_id>/apply/", ApplyToGigView.as_view(), name="gig-apply"),
@@ -19,5 +23,10 @@ urlpatterns = [
         "gigs/<int:gig_id>/applications/",
         GigApplicationListView.as_view(),
         name="gig-applications",
+    ),
+    path(
+        "applications/<int:application_id>/accept/",
+        AcceptApplicationView.as_view(),
+        name="application-accept",
     ),
 ]

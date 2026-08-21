@@ -8,7 +8,11 @@ from rest_framework.views import APIView
 from apps.gigs.models import Gig
 from apps.hiring import services
 from apps.hiring.models import Application
-from apps.hiring.serializers import ApplicationSerializer, ApplyToGigSerializer
+from apps.hiring.serializers import (
+    ApplicationSerializer,
+    ApplyToGigSerializer,
+    ContractSerializer,
+)
 
 
 class ApplyToGigView(APIView):
@@ -51,3 +55,27 @@ class GigApplicationListView(generics.ListAPIView):
         # simply has no applicants, which is a different and wrong answer.
         gig = get_object_or_404(Gig, pk=self.kwargs["gig_id"])
         return Application.objects.filter(gig=gig)
+
+
+class AcceptApplicationView(APIView):
+    """``POST /api/applications/{application_id}/accept/`` -- creator hires.
+
+    Returns **201 with the created Contract**, not the updated application. A
+    new resource genuinely came into existence, and the contract id is what the
+    caller needs next -- returning the application would force a second request
+    to find it. The specification does not state a response shape; recorded as
+    A24 in DECISIONS.md.
+
+    No request body: the application id in the URL identifies everything needed.
+    Note that without authentication there is nothing here to verify the caller
+    is the gig's creator (gap G3) -- the endpoint trusts whoever calls it, which
+    is the single largest gap between this implementation and a real one.
+    """
+
+    def post(self, request, application_id: int) -> Response:
+        application = get_object_or_404(Application, pk=application_id)
+        contract = services.accept_application(application=application)
+        return Response(
+            ContractSerializer(contract).data,
+            status=status.HTTP_201_CREATED,
+        )

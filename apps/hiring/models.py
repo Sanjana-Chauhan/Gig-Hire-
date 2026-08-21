@@ -5,7 +5,7 @@ from django.db import models
 from apps.common.constraints import positive_value_constraint
 from apps.common.fields import PositiveMoneyField
 from apps.common.models import TimeStampedModel
-from apps.hiring.enums import ApplicationStatus
+from apps.hiring.enums import ApplicationStatus, ContractStatus
 
 
 class Application(TimeStampedModel):
@@ -88,3 +88,79 @@ class Application(TimeStampedModel):
         which states are terminal.
         """
         return self.status == ApplicationStatus.PENDING
+
+
+class Contract(TimeStampedModel):
+    """A binding agreement created when a creator accepts an application.
+
+    Created only by ``services.accept_application`` -- there is no endpoint that
+    creates one directly. That is what makes business rule 3's invariants hold:
+    a contract exists if and only if an application was accepted, in the same
+    transaction that moved the gig to ``in_progress``.
+    """
+
+    gig = models.ForeignKey(
+        "gigs.Gig",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+        # PROTECT, and this one is required rather than merely prudent.
+        # Business rule 7 says deleting a gig "must not cascade-delete the
+        # contract or its reviews". CASCADE would do exactly that, and the loss
+        # would be a financial and reputation record -- unrecoverable. The
+        # database refusing is the guarantee; the API's 409 (Step 8) is the
+        # good error message on top of it.
+    )
+    supplier = models.ForeignKey(
+        "accounts.Supplier",
+        on_delete=models.PROTECT,
+        related_name="contracts",
+    )
+
+    # Copied from the accepted application rather than referenced through it.
+    # A rate that shifts after the fact is not an agreement, and the supplier's
+    # later rate changes must not retroactively alter what was agreed. This is
+    # the standard reason financial records denormalise: the value at the moment
+    # of agreement is itself the fact being recorded.
+    agreed_rate = PositiveMoneyField()
+
+    status = models.CharField(
+        max_length=16,
+        choices=ContractStatus.choices,
+        default=ContractStatus.ACTIVE,
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            positive_value_constraint(
+                field="agreed_rate",
+                name="contract_agreed_rate_positive",
+            ),
+            # At most one *active* contract per gig. Nothing in the workflow
+            # should produce a second -- accepting requires an open gig, and the
+            # first accept closes that door -- so this constraint is a statement
+            # that the workflow is correct, and it will fail loudly if a future
+            # change breaks it. Same partial-index pattern as Application's
+            # pending constraint, for the same reason: "at most one live X".
+            models.UniqueConstraint(
+                fields=["gig"],
+                condition=models.Q(status=ContractStatus.ACTIVE),
+                name="unique_active_contract_per_gig",
+            ),
+        ]
+        indexes = [
+            # Business rule 4 counts a supplier's active contracts on every
+            # accept. This is the index that count uses.
+            models.Index(
+                fields=["supplier", "status"],
+                name="contract_supplier_status_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"contract {self.pk}: supplier {self.supplier_id} on gig {self.gig_id}"
+
+    @property
+    def is_active(self) -> bool:
+        """Whether this contract counts towards a supplier's workload cap."""
+        return self.status == ContractStatus.ACTIVE
