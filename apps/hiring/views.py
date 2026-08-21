@@ -79,3 +79,31 @@ class AcceptApplicationView(APIView):
             ContractSerializer(contract).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class RejectApplicationView(APIView):
+    """``POST /api/applications/{application_id}/reject/`` -- creator declines.
+
+    Returns **200 with the updated application**, unlike accept's 201: nothing
+    was created, an existing resource changed state. Returning the application
+    also lets a client confirm the new status without a follow-up request.
+
+    Written out rather than sharing a base class with WithdrawApplicationView.
+    The two are nearly identical today and will not stay that way: reject must
+    authorise the caller as the gig's creator, withdraw as the supplier who
+    applied. A shared view would need a branch on that almost immediately.
+    """
+
+    def post(self, request, application_id: int) -> Response:
+        application = get_object_or_404(Application, pk=application_id)
+        updated = services.reject_application(application=application)
+        return Response(ApplicationSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class WithdrawApplicationView(APIView):
+    """``POST /api/applications/{application_id}/withdraw/`` -- supplier pulls out."""
+
+    def post(self, request, application_id: int) -> Response:
+        application = get_object_or_404(Application, pk=application_id)
+        updated = services.withdraw_application(application=application)
+        return Response(ApplicationSerializer(updated).data, status=status.HTTP_200_OK)

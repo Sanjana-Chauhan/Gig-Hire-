@@ -15,6 +15,8 @@ from apps.hiring.views import (
     AcceptApplicationView,
     ApplyToGigView,
     GigApplicationListView,
+    RejectApplicationView,
+    WithdrawApplicationView,
 )
 
 urlpatterns = [
@@ -28,5 +30,15 @@ urlpatterns = [
         "applications/<int:application_id>/accept/",
         AcceptApplicationView.as_view(),
         name="application-accept",
+    ),
+    path(
+        "applications/<int:application_id>/reject/",
+        RejectApplicationView.as_view(),
+        name="application-reject",
+    ),
+    path(
+        "applications/<int:application_id>/withdraw/",
+        WithdrawApplicationView.as_view(),
+        name="application-withdraw",
     ),
 ]

@@ -174,6 +174,64 @@ def _reject_competing_applications(*, gig: Gig, accepted: Application) -> int:
     )
 
 
+def reject_application(*, application: Application) -> Application:
+    """Reject an application (business rule 6 guards the terminal states).
+
+    Kept as its own function rather than sharing an implementation with
+    ``withdraw_application``, despite the two being mechanically identical.
+    The test is not "is this duplicated?" but "do these change for the same
+    reason?" -- and they do not:
+
+    * rejecting is the *creator* declining a bid,
+    * withdrawing is the *supplier* pulling out.
+
+    Once authentication exists (gap G3) they diverge completely: one authorises
+    against ``application.gig.creator``, the other against
+    ``application.supplier``. Merging them now would produce a shared function
+    that immediately needs a branch on who is calling, and a parameterised
+    ``_terminate_application(application, new_status)`` would trade three
+    duplicated lines for an indirection plus a status argument that makes every
+    call site less meaningful.
+
+    What *is* shared -- the pending guard -- is shared, as a named function.
+
+    Note there is deliberately no requirement that the gig be open. The spec is
+    silent (ambiguity A25), and blocking rejection on a cancelled gig would
+    strand its pending applications in ``pending`` forever with no way to close
+    them out. Rejection is always a legitimate way to finish a live bid.
+    """
+    with transaction.atomic():
+        application = Application.objects.select_for_update().get(pk=application.pk)
+        _assert_application_is_pending(application)
+
+        application.status = ApplicationStatus.REJECTED
+        application.save(update_fields=["status", "updated_at"])
+
+    return application
+
+
+def withdraw_application(*, application: Application) -> Application:
+    """Withdraw an application on the supplier's behalf.
+
+    Business rule 6 names ``accepted`` and ``rejected`` as terminal; ambiguity
+    A12 extends that to ``withdrawn`` -- withdrawing twice is not a meaningful
+    operation, so the second attempt is a 409 rather than a silent no-op. The
+    ``is_pending`` guard covers all three without enumerating them.
+
+    Rule 2's other half is what makes this non-destructive: a withdrawn
+    application stays as history, and the supplier may apply again with a new
+    row while the gig is still open.
+    """
+    with transaction.atomic():
+        application = Application.objects.select_for_update().get(pk=application.pk)
+        _assert_application_is_pending(application)
+
+        application.status = ApplicationStatus.WITHDRAWN
+        application.save(update_fields=["status", "updated_at"])
+
+    return application
+
+
 # ---------------------------------------------------------------------------
 # Guards
 # ---------------------------------------------------------------------------
