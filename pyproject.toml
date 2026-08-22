@@ -8,13 +8,21 @@ DJANGO_SETTINGS_MODULE = "config.settings.test"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
-# -ra prints a short summary of every non-passing outcome.
+# -v names every test and its outcome, one line each, instead of a row of dots.
+#   Verbosity is cumulative in pytest, so `pytest -q` on the command line cancels
+#   this out and gives the compact form back when that is what you want.
+# -ra prints a summary of every non-passing outcome at the end, so a failure
+#   cannot scroll past unnoticed in 441 lines of output.
+# --tb=short keeps a failure traceback to the assertion and its line rather than
+#   the full call stack through the framework.
 # --strict-markers turns a typo in a marker name into an error instead of a
 #   silently ignored marker, which would quietly disable traceability.
 # Coverage runs by default so that a bare `pytest` satisfies both "run the
 #   suite" and "show me coverage" without the reader needing extra flags.
 addopts = """
+    -v
     -ra
+    --tb=short
     --strict-markers
     --strict-config
     --cov=apps
@@ -26,7 +34,10 @@ addopts = """
 # traceability matrix possible.
 markers = [
     "rule(identifier): links this test to a business rule from the specification",
+    "case(identifier): links this test to a case id in TEST_CASES.md",
+    "interpretation(identifier): links this test to an interpretation in DECISIONS.md",
     "smoke: minimal end-to-end checks worth running before anything else",
+    "slow: takes noticeably longer, usually because it builds state through the API",
 ]
 
 [tool.coverage.run]
