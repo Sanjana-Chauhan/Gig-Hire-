@@ -2,12 +2,15 @@
 
 from rest_framework import serializers
 
+from apps.common.serializers import BaseModelSerializer
+
 from apps.common.text import canonicalize_tag
 from apps.gigs import transitions
+from apps.gigs.enums import GigStatus
 from apps.gigs.models import Gig
 
 
-class GigSerializer(serializers.ModelSerializer):
+class GigSerializer(BaseModelSerializer):
     """Full representation of a gig.
 
     ``creator`` is represented as a primary key rather than a nested object.
@@ -17,16 +20,12 @@ class GigSerializer(serializers.ModelSerializer):
     the creator table. A nested representation would issue one query per row and
     would need ``select_related`` to compensate.
 
-    ``status`` is read-only. Every gig is created ``open``; the lifecycle is
+    ``status`` may be supplied when creating, but only as ``open`` -- see
+    ``validate_status``. Every gig therefore begins open, and the lifecycle is
     driven by domain actions (accepting an application, or an explicit
-    transition), never by a client asserting a state directly. Allowing it here
-    would permit an ``in_progress`` gig with no contract, which is a state the
-    rest of the rules assume cannot exist.
-
-    Note the consequence, recorded in DECISIONS.md: DRF ignores read-only fields
-    silently, so ``POST {"status": "completed"}`` returns 201 with status
-    ``open`` rather than a 400. That is conventional REST behaviour, and it is
-    covered by an explicit test so it is documented rather than accidental.
+    transition) rather than by a client asserting a state directly. Allowing
+    any value here would permit an ``in_progress`` gig with no contract, which
+    is a state the rest of the rules assume cannot exist.
     """
 
     class Meta:
@@ -42,7 +41,33 @@ class GigSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "status", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_status(self, value: str) -> str:
+        """Only ``open`` may be supplied when creating a gig.
+
+        ``status`` used to be read-only here, which protected the workflow but
+        had a dishonest side effect: DRF drops read-only fields *silently*, so
+        ``POST {"status": "completed"}`` returned 201 with a gig that was
+        actually open. The caller was told their request succeeded when the most
+        important part of it had been discarded.
+
+        Accepting the field and refusing every value except ``open`` keeps the
+        protection and adds the missing error. The invariant is unchanged:
+        ``in_progress`` is still reachable only by accepting an application, and
+        ``completed``/``cancelled`` only by an explicit transition on an existing
+        gig.
+
+        GigUpdateSerializer overrides this, because on update any status may be
+        *sent* -- whether the move is legal is decided by the transition table.
+        """
+        if value != GigStatus.OPEN:
+            raise serializers.ValidationError(
+                f'A gig can only be created with status "{GigStatus.OPEN}". '
+                f'"{value}" is reached through the hiring workflow or an '
+                f"explicit status change on an existing gig."
+            )
+        return value
 
     def validate_category(self, value: str) -> str:
         """Canonicalise the category so filtering is reliable.
@@ -74,6 +99,17 @@ class GigUpdateSerializer(GigSerializer):
 
     class Meta(GigSerializer.Meta):
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_status(self, value: str) -> str:
+        """Any valid status may be *sent* on update.
+
+        Deliberately neutralises the parent's create-only restriction. Whether a
+        particular move is permitted is not a question about the value in
+        isolation -- it depends on the gig's current status and its contracts --
+        so it is answered by the transition table in ``validate()`` below, which
+        can give a far more useful message than "that is not open".
+        """
+        return value
 
     def validate(self, attrs: dict) -> dict:
         gig = self.instance

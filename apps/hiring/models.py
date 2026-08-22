@@ -1,11 +1,41 @@
 """Models for the hiring workflow."""
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.common.constraints import positive_value_constraint
 from apps.common.fields import PositiveMoneyField
 from apps.common.models import TimeStampedModel
-from apps.hiring.enums import ApplicationStatus, ContractStatus
+from apps.hiring.constants import RATING_MAX, RATING_MIN
+from apps.hiring.enums import ApplicationStatus, ContractStatus, ReviewerType
+
+
+class ApplicationQuerySet(models.QuerySet):
+    """Query and bulk-update vocabulary for applications.
+
+    Exists so other apps can act on a gig's applications without importing
+    anything from hiring -- the same reverse-relation technique as
+    ContractQuerySet. The gigs app needs to turn down outstanding bids when a
+    gig is cancelled, but hiring already imports gigs, so importing back would
+    create a cycle.
+    """
+
+    def pending(self) -> "ApplicationQuerySet":
+        return self.filter(status=ApplicationStatus.PENDING)
+
+    def reject_all_pending(self) -> int:
+        """Turn down every pending application in this set. Returns the count.
+
+        One UPDATE rather than a loop, and ``updated_at`` is set by hand because
+        ``auto_now`` lives in ``Model.save()`` and a queryset update never calls
+        it. Rows that are already finished are untouched -- the filter sees only
+        pending ones -- so their timestamps stay as they were.
+        """
+        return self.pending().update(
+            status=ApplicationStatus.REJECTED,
+            updated_at=timezone.now(),
+        )
 
 
 class Application(TimeStampedModel):
@@ -40,6 +70,8 @@ class Application(TimeStampedModel):
         choices=ApplicationStatus.choices,
         default=ApplicationStatus.PENDING,
     )
+
+    objects = ApplicationQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -110,12 +142,6 @@ class ContractQuerySet(models.QuerySet):
 
     def active(self) -> "ContractQuerySet":
         return self.filter(status=ContractStatus.ACTIVE)
-
-    def for_supplier(self, supplier) -> "ContractQuerySet":
-        return self.filter(supplier=supplier)
-
-    def for_creator(self, creator) -> "ContractQuerySet":
-        return self.filter(gig__creator=creator)
 
 
 class Contract(TimeStampedModel):
@@ -194,3 +220,60 @@ class Contract(TimeStampedModel):
     def is_active(self) -> bool:
         """Whether this contract counts towards a supplier's workload cap."""
         return self.status == ContractStatus.ACTIVE
+
+
+class Review(TimeStampedModel):
+    """Feedback left on a completed contract."""
+
+    contract = models.ForeignKey(
+        "hiring.Contract",
+        on_delete=models.PROTECT,
+        related_name="reviews",
+        # PROTECT for the same reason as Contract.gig: business rule 7 says a
+        # deletion "must not cascade-delete the contract or its reviews". A
+        # review is reputation -- the one thing a marketplace participant cannot
+        # rebuild -- so no ordinary operation may remove it.
+    )
+
+    reviewer_type = models.CharField(
+        max_length=32,
+        choices=ReviewerType.choices,
+    )
+
+    rating = models.PositiveSmallIntegerField(
+        validators=[
+            MinValueValidator(RATING_MIN),
+            MaxValueValidator(RATING_MAX),
+        ],
+        # Validators here become serializer validators automatically (DRF copies
+        # them from the model field), which is what turns a rating of 6 into a
+        # clean 400. PositiveSmallIntegerField also rules out negatives at the
+        # column level, so the range only has to be enforced upward.
+    )
+
+    # Optional per the specification. blank=True with an empty-string default
+    # rather than null=True: two representations of "no comment" is one too many,
+    # and every consumer would then have to handle both.
+    comment = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            # Business rule 9, second half: one review per reviewer_type per
+            # contract. Note this is an *unconditional* composite unique, unlike
+            # Application's partial index -- there is no such thing as a
+            # withdrawn review, so no state qualifies the rule.
+            models.UniqueConstraint(
+                fields=["contract", "reviewer_type"],
+                name="unique_review_per_contract_and_reviewer_type",
+            ),
+            # Business rule 10. The validators above produce the clean 400; this
+            # is what holds for writes that never run validation.
+            models.CheckConstraint(
+                condition=models.Q(rating__gte=RATING_MIN, rating__lte=RATING_MAX),
+                name="review_rating_within_range",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.reviewer_type} {self.rating}/{RATING_MAX} on contract {self.contract_id}"

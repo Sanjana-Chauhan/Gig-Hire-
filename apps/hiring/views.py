@@ -7,11 +7,14 @@ from rest_framework.views import APIView
 
 from apps.gigs.models import Gig
 from apps.hiring import services
-from apps.hiring.models import Application
+from apps.hiring.filters import ContractFilterSet
+from apps.hiring.models import Application, Contract, Review
 from apps.hiring.serializers import (
     ApplicationSerializer,
     ApplyToGigSerializer,
     ContractSerializer,
+    CreateReviewSerializer,
+    ReviewSerializer,
 )
 
 
@@ -107,3 +110,67 @@ class WithdrawApplicationView(APIView):
         application = get_object_or_404(Application, pk=application_id)
         updated = services.withdraw_application(application=application)
         return Response(ApplicationSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class ContractListView(generics.ListAPIView):
+    """``GET /api/contracts/?supplier_id=&creator_id=`` -- list contracts."""
+
+    serializer_class = ContractSerializer
+    filterset_class = ContractFilterSet
+
+    # select_related on gig is not for the serializer -- that emits primary keys
+    # and touches no related table. It is for the *filter*: ?creator_id= joins
+    # through gig, and without this the join is repeated per row when the
+    # queryset is evaluated. Present because a query needs it, not by habit.
+    queryset = Contract.objects.select_related("gig")
+
+
+class CompleteContractView(APIView):
+    """``POST /api/contracts/{contract_id}/complete/`` -- mark work finished.
+
+    Returns 200 with the updated contract. Note this does not complete the gig:
+    that is a separate PATCH, gated on no active contract remaining. See the
+    revision of ambiguity A9 in DECISIONS.md.
+    """
+
+    def post(self, request, contract_id: int) -> Response:
+        contract = get_object_or_404(Contract, pk=contract_id)
+        updated = services.complete_contract(contract=contract)
+        return Response(ContractSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+class ContractReviewView(generics.ListCreateAPIView):
+    """``POST`` and ``GET`` on ``/api/contracts/{contract_id}/reviews/``.
+
+    The specification only asks for POST. GET is additive, for the same reason
+    the creator endpoints were: an endpoint that writes data with no way to read
+    it back is not usable, and rule 9's "one review per reviewer_type" is
+    something a client needs to be able to check. Recorded in DECISIONS.md.
+
+    ``create`` is written out rather than left to ``CreateModelMixin`` because
+    creation must go through the service, where rule 9's guards live. The
+    generic's own flow would call ``serializer.save()`` and bypass them.
+    """
+
+    serializer_class = ReviewSerializer
+
+    def get_contract(self) -> Contract:
+        return get_object_or_404(Contract, pk=self.kwargs["contract_id"])
+
+    def get_queryset(self):
+        # Resolving the contract first means reviews for a nonexistent contract
+        # are a 404, not an empty list.
+        return Review.objects.filter(contract=self.get_contract())
+
+    def create(self, request, *args, **kwargs) -> Response:
+        contract = self.get_contract()
+
+        serializer = CreateReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        review = services.create_review(contract=contract, **serializer.validated_data)
+
+        return Response(
+            ReviewSerializer(review).data,
+            status=status.HTTP_201_CREATED,
+        )

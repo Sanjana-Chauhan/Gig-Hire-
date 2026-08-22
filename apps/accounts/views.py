@@ -10,15 +10,24 @@ class CreatorViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Create, retrieve and list creators.
+    """Create, retrieve, list and update creators.
 
-    Composed from explicit mixins rather than subclassing ``ModelViewSet``. That
-    is a least-privilege decision: ``ModelViewSet`` would also expose update and
-    destroy, and ``DELETE /api/creators/{id}/`` would cascade away every gig that
-    creator ever posted -- along with its contracts and reviews. Nothing in the
-    specification asks for it, so the safest thing to expose is nothing.
+    Update is included because a creator changing their display name, channel
+    name or email address is ordinary account maintenance, not an exceptional
+    operation -- and with no way to do it, a creator who rebrands or changes
+    email would have to be recreated, orphaning nothing but starting their gig
+    history from scratch. The specification lists no creator endpoints at all
+    (gap G1), so this is an addition rather than a deviation.
+
+    Destroy is still deliberately absent. A creator's gigs are protected against
+    deletion, so removing a creator would either fail at the database or, with a
+    different setting, silently take their entire gig, contract and review
+    history with it. The recognised way to retire an account is to stop using
+    it, not to erase the record of what it did. Recorded as an open question in
+    DECISIONS.md.
 
     The endpoints themselves are an addition to the specification, which lists no
     creator routes at all while requiring a creator FK on every gig. Without

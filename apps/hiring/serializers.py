@@ -2,11 +2,13 @@
 
 from rest_framework import serializers
 
+from apps.common.serializers import BaseModelSerializer
+
 from apps.accounts.models import Supplier
-from apps.hiring.models import Application, Contract
+from apps.hiring.models import Application, Contract, Review
 
 
-class ApplicationSerializer(serializers.ModelSerializer):
+class ApplicationSerializer(BaseModelSerializer):
     """Read representation of an application.
 
     Related objects as primary keys, for the same reason as GigSerializer: the
@@ -28,7 +30,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class ApplyToGigSerializer(serializers.ModelSerializer):
+class ApplyToGigSerializer(BaseModelSerializer):
     """Validates the body of ``POST /api/gigs/{id}/apply/``.
 
     This is a *command* payload rather than a representation of a resource, and
@@ -64,7 +66,7 @@ class ApplyToGigSerializer(serializers.ModelSerializer):
         fields = ["supplier_id", "proposed_rate"]
 
 
-class ContractSerializer(serializers.ModelSerializer):
+class ContractSerializer(BaseModelSerializer):
     """Read representation of a contract.
 
     There is no write counterpart, deliberately. Contracts are created only by
@@ -84,3 +86,38 @@ class ContractSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
+
+
+class ReviewSerializer(BaseModelSerializer):
+    """Read representation of a review."""
+
+    class Meta:
+        model = Review
+        fields = [
+            "id",
+            "contract",
+            "reviewer_type",
+            "rating",
+            "comment",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class CreateReviewSerializer(BaseModelSerializer):
+    """Validates the body of ``POST /api/contracts/{id}/reviews/``.
+
+    ``contract`` is absent by design: it comes from the URL. Accepting it in the
+    body as well would allow the two to disagree, and then the endpoint needs a
+    rule about which one wins. A resource identified by its path should not also
+    be identifiable by its payload.
+
+    ``rating`` is not declared, so DRF builds it from the model and inherits the
+    1-5 validators -- one definition of the range, shared by the API, the model
+    and the database constraint.
+    """
+
+    class Meta:
+        model = Review
+        fields = ["reviewer_type", "rating", "comment"]

@@ -9,13 +9,14 @@ background job or a test.
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.accounts.enums import AvailabilityStatus
 from apps.accounts.models import Supplier
+from apps.common.constants import MAX_ACTIVE_CONTRACTS_PER_SUPPLIER
 from apps.common.exceptions import ConflictError
 from apps.gigs.enums import GigStatus
 from apps.gigs.models import Gig
-from apps.hiring.constants import MAX_ACTIVE_CONTRACTS_PER_SUPPLIER
 from apps.hiring.enums import ApplicationStatus, ContractStatus
-from apps.hiring.models import Application, Contract
+from apps.hiring.models import Application, Contract, Review
 
 
 def apply_to_gig(*, gig: Gig, supplier: Supplier, proposed_rate) -> Application:
@@ -144,7 +145,49 @@ def accept_application(*, application: Application) -> Contract:
         gig.status = GigStatus.IN_PROGRESS
         gig.save(update_fields=["status", "updated_at"])
 
+        # Taking on this job may have filled the supplier's last free slot.
+        _sync_supplier_availability(supplier=application.supplier)
+
     return contract
+
+
+def _sync_supplier_availability(*, supplier: Supplier) -> None:
+    """Keep ``busy`` in step with the supplier's live agreement count.
+
+    Our interpretation of what ``busy`` means, taken from how marketplaces
+    normally present availability: a supplier is busy exactly when they are
+    carrying as much work as the platform allows. The specification never
+    defines the value, and left undefined it does nothing at all -- a label no
+    rule reads (see B-3 in DECISIONS.md).
+
+    Deriving it here makes it meaningful *without* contradicting business rule 5.
+    Rule 5 blocks only ``inactive`` suppliers from being hired, which reads like
+    an oversight if ``busy`` means "cannot take work". But if busy means "at the
+    cap", then a busy supplier is already blocked by the workload rule, so both
+    rules agree and neither needs bending.
+
+    ``inactive`` is never overwritten. That value is the supplier's own decision
+    to stop taking work, and a change in their workload must not undo it -- a
+    supplier who steps away while holding three jobs should still be inactive
+    when one of them finishes.
+    """
+    if supplier.availability_status == AvailabilityStatus.INACTIVE:
+        return
+
+    live_agreements = Contract.objects.filter(
+        supplier=supplier,
+        status=ContractStatus.ACTIVE,
+    ).count()
+
+    target = (
+        AvailabilityStatus.BUSY
+        if live_agreements >= MAX_ACTIVE_CONTRACTS_PER_SUPPLIER
+        else AvailabilityStatus.AVAILABLE
+    )
+
+    if supplier.availability_status != target:
+        supplier.availability_status = target
+        supplier.save(update_fields=["availability_status", "updated_at"])
 
 
 def _reject_competing_applications(*, gig: Gig, accepted: Application) -> int:
@@ -318,3 +361,87 @@ def _assert_under_workload_cap(*, supplier: Supplier) -> None:
             f"the maximum is {MAX_ACTIVE_CONTRACTS_PER_SUPPLIER}.",
             code="workload_cap_reached",
         )
+
+
+def complete_contract(*, contract: Contract) -> Contract:
+    """Mark a contract complete.
+
+    Only an ``active`` contract can be completed: completing twice, or
+    completing a terminated contract, is a 409 rather than a silent success --
+    the same reasoning as rule 6's terminal states.
+
+    Note what this deliberately does **not** do: it does not touch the gig.
+    Ambiguity A9 was initially interpreted as "completing the contract completes
+    the gig", and that was revised in Step 8. The specification names
+    ``in_progress -> completed`` as an allowed PATCH transition on the gig, so
+    auto-completing here would make the spec's own example unreachable. Finishing
+    a job is therefore two explicit steps: complete the contract, then complete
+    the gig. The gig transition is gated on no active contract remaining, so the
+    order cannot be reversed.
+
+    Completing also frees capacity under rule 4's workload cap, since the cap
+    counts only active contracts.
+    """
+    with transaction.atomic():
+        contract = Contract.objects.select_for_update().get(pk=contract.pk)
+
+        if not contract.is_active:
+            raise ConflictError(
+                f"This contract is {contract.status} and can no longer be "
+                f"completed.",
+                code="contract_not_active",
+            )
+
+        contract.status = ContractStatus.COMPLETED
+        contract.save(update_fields=["status", "updated_at"])
+
+        # Finishing a job frees a slot, so a busy supplier becomes available
+        # again -- unless they have chosen to be inactive.
+        _sync_supplier_availability(supplier=contract.supplier)
+
+    return contract
+
+
+def create_review(*, contract: Contract, reviewer_type: str, rating: int, comment: str = "") -> Review:
+    """Leave a review on a contract (business rule 9).
+
+    Two guards, both from rule 9: the contract must be ``completed``, and there
+    may be only one review per ``reviewer_type`` per contract.
+
+    The completed-only rule means a ``terminated`` contract can never be
+    reviewed -- flagged as ambiguity A15, since a real platform very much wants
+    feedback on work that went wrong. Implemented as specified rather than
+    quietly widened.
+
+    Same check-then-constraint shape as ``apply_to_gig``: the explicit check
+    produces a precise 409, the unique constraint makes the rule true under
+    concurrency, and the inner ``atomic()`` provides the savepoint that keeps the
+    transaction usable after a caught IntegrityError.
+    """
+    with transaction.atomic():
+        if contract.status != ContractStatus.COMPLETED:
+            raise ConflictError(
+                f"Reviews can only be left on completed contracts; this "
+                f"contract is {contract.status}.",
+                code="contract_not_completed",
+            )
+
+        if Review.objects.filter(contract=contract, reviewer_type=reviewer_type).exists():
+            raise ConflictError(
+                f"A {reviewer_type} review already exists for this contract.",
+                code="duplicate_review",
+            )
+
+        try:
+            with transaction.atomic():
+                return Review.objects.create(
+                    contract=contract,
+                    reviewer_type=reviewer_type,
+                    rating=rating,
+                    comment=comment,
+                )
+        except IntegrityError as exc:
+            raise ConflictError(
+                f"A {reviewer_type} review already exists for this contract.",
+                code="duplicate_review",
+            ) from exc

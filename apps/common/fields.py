@@ -38,7 +38,20 @@ class PositiveMoneyField(models.DecimalField):
     ``bulk_create()``, a raw query). See apps/common/constraints.py.
     """
 
-    default_validators = [MinValueValidator(MONEY_SMALLEST_POSITIVE)]
+    default_validators = [
+        MinValueValidator(
+            MONEY_SMALLEST_POSITIVE,
+            # The default wording is "Ensure this value is greater than or equal
+            # to 0.01", which describes the check rather than the money. Saying
+            # "greater than zero" matches how the rule is written in the
+            # specification, and naming the smallest usable amount tells the
+            # caller what to send instead.
+            message=(
+                f"This amount must be greater than zero. The smallest "
+                f"allowed value is {MONEY_SMALLEST_POSITIVE}."
+            ),
+        )
+    ]
 
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("max_digits", MONEY_MAX_DIGITS)

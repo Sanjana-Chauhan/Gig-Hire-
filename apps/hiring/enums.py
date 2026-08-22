@@ -40,3 +40,17 @@ class ContractStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     COMPLETED = "completed", "Completed"
     TERMINATED = "terminated", "Terminated"
+
+
+class ReviewerType(models.TextChoices):
+    """Which direction a review runs.
+
+    A hiring transaction has two sides and both get to speak, so the reviewer
+    type is not "who wrote it" but "which relationship is being rated". That is
+    what makes business rule 9's uniqueness meaningful: one review per direction
+    per contract, so a creator cannot pile on but the supplier's own review is
+    unaffected.
+    """
+
+    CREATOR_ON_SUPPLIER = "creator_on_supplier", "Creator on supplier"
+    SUPPLIER_ON_CREATOR = "supplier_on_creator", "Supplier on creator"

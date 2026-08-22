@@ -1,7 +1,14 @@
-"""Reusable serializer fields and base classes."""
+"""Reusable serializer fields and the project's base model serializer."""
 
 from django.db import models
 from rest_framework import serializers
+
+from apps.common.constants import (
+    MONEY_DECIMAL_PLACES,
+    MONEY_MAX_DIGITS,
+    MONEY_SMALLEST_POSITIVE,
+)
+from apps.common.fields import PositiveMoneyField
 
 
 class NormalizedEmailField(serializers.EmailField):
@@ -46,7 +53,61 @@ class NormalizedEmailField(serializers.EmailField):
         return value.strip().lower()
 
 
-class EmailNormalizingModelSerializer(serializers.ModelSerializer):
+def _largest_allowed_amount() -> str:
+    """The biggest value a money field can hold, formatted for a person to read.
+
+    Derived from the precision constants rather than written out, so the message
+    cannot drift away from the rule it describes.
+    """
+    whole_digits = MONEY_MAX_DIGITS - MONEY_DECIMAL_PLACES
+    largest_whole = 10**whole_digits - 1
+    largest_fraction = "9" * MONEY_DECIMAL_PLACES
+    return f"{largest_whole:,}.{largest_fraction}"
+
+
+class MoneyField(serializers.DecimalField):
+    """A money field whose error messages describe money, not arithmetic.
+
+    The framework's defaults are technically accurate and unhelpful: "Ensure
+    that there are no more than 12 digits in total" tells a caller about the
+    storage format rather than about the amount they sent. Someone who mistyped
+    a rate needs to know what the limit *is* and what a correct value looks like.
+
+    The messages are declared as ``default_error_messages`` -- a class attribute
+    -- rather than updated inside ``__init__``. That is not a style preference:
+    DRF's DecimalField builds its own MinValueValidator during ``__init__`` and
+    bakes the *current* text of ``error_messages["min_value"]`` into it. Editing
+    the dictionary after calling ``super().__init__()`` is therefore too late,
+    and the old wording survives. Field collects ``default_error_messages`` from
+    every class in the hierarchy before any of that happens, so a subclass
+    declared this way wins.
+
+    Applied everywhere automatically through BaseModelSerializer's field
+    mapping, so no serializer has to remember to ask for it.
+    """
+
+    default_error_messages = {
+        "invalid": "Enter this amount as a number, for example 45.50.",
+        "min_value": (
+            f"This amount must be greater than zero. The smallest allowed "
+            f"value is {MONEY_SMALLEST_POSITIVE}."
+        ),
+        "max_decimal_places": (
+            f"Amounts may have at most {MONEY_DECIMAL_PLACES} decimal places, "
+            f"for example 45.50."
+        ),
+        "max_digits": (
+            f"This amount is too large. The largest allowed value is "
+            f"{_largest_allowed_amount()}."
+        ),
+        "max_whole_digits": (
+            f"This amount is too large. The largest allowed value is "
+            f"{_largest_allowed_amount()}."
+        ),
+    }
+
+
+class BaseModelSerializer(serializers.ModelSerializer):
     """A ModelSerializer that renders every model EmailField as a normalised one.
 
     Why this exists rather than declaring ``email = NormalizedEmailField()`` on
@@ -77,4 +138,5 @@ class EmailNormalizingModelSerializer(serializers.ModelSerializer):
     serializer_field_mapping = {
         **serializers.ModelSerializer.serializer_field_mapping,
         models.EmailField: NormalizedEmailField,
+        PositiveMoneyField: MoneyField,
     }

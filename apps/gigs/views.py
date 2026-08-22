@@ -1,10 +1,12 @@
 """API endpoints for gigs."""
 
+from django.db import transaction
 from rest_framework import viewsets
 
 from apps.gigs.filters import GigFilterSet
 from apps.gigs.models import Gig
 from apps.gigs import transitions
+from apps.gigs.enums import GigStatus
 from apps.gigs.serializers import GigSerializer, GigUpdateSerializer
 
 
@@ -49,6 +51,33 @@ class GigViewSet(viewsets.ModelViewSet):
         if self.action in {"update", "partial_update"}:
             return GigUpdateSerializer
         return GigSerializer
+
+    def perform_update(self, serializer) -> None:
+        """Save the gig, and turn down outstanding bids when it is cancelled.
+
+        Our interpretation of a case the specification leaves open (B-9): when a
+        gig is cancelled, its pending applications become ``rejected``. Closing
+        a job posting declines the proposals still outstanding on it, which is
+        how marketplaces normally behave -- and the alternative is worse than
+        untidy. Applications left pending on a cancelled gig can never be
+        accepted, so they would sit in listings as live bids for work that no
+        longer exists, and every supplier would be left waiting for an answer
+        that could not come.
+
+        Both writes happen in one transaction: a gig must never end up cancelled
+        with its bids still pending, or vice versa.
+
+        ``gig.applications.reject_all_pending()`` reaches hiring's behaviour
+        through the reverse relation, so this app still imports nothing from
+        hiring. Already-finished applications are untouched, including their
+        timestamps.
+        """
+        with transaction.atomic():
+            previous_status = serializer.instance.status
+            gig = serializer.save()
+
+            if previous_status != gig.status and gig.status == GigStatus.CANCELLED:
+                gig.applications.reject_all_pending()
 
     def perform_destroy(self, instance: Gig) -> None:
         """Enforce business rule 7 before deleting.

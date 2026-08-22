@@ -13,6 +13,9 @@ from django.urls import path
 
 from apps.hiring.views import (
     AcceptApplicationView,
+    CompleteContractView,
+    ContractListView,
+    ContractReviewView,
     ApplyToGigView,
     GigApplicationListView,
     RejectApplicationView,
@@ -40,5 +43,16 @@ urlpatterns = [
         "applications/<int:application_id>/withdraw/",
         WithdrawApplicationView.as_view(),
         name="application-withdraw",
+    ),
+    path("contracts/", ContractListView.as_view(), name="contract-list"),
+    path(
+        "contracts/<int:contract_id>/complete/",
+        CompleteContractView.as_view(),
+        name="contract-complete",
+    ),
+    path(
+        "contracts/<int:contract_id>/reviews/",
+        ContractReviewView.as_view(),
+        name="contract-reviews",
     ),
 ]
