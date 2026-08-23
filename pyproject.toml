@@ -37,7 +37,6 @@ markers = [
     "case(identifier): links this test to a case id in TEST_CASES.md",
     "interpretation(identifier): links this test to an interpretation in DECISIONS.md",
     "smoke: minimal end-to-end checks worth running before anything else",
-    "slow: takes noticeably longer, usually because it builds state through the API",
 ]
 
 [tool.coverage.run]

@@ -52,7 +52,8 @@ class ApplyToGigSerializer(BaseModelSerializer):
     means it inherits ``max_digits``, ``decimal_places`` and the positivity
     validator from PositiveMoneyField -- one definition of what a monetary
     amount is, rather than a second copy here that can drift. This is the same
-    lesson as Step 3's email bug, applied in the other direction: DRF's
+    lesson as the email-uniqueness bug fixed in ``apps/common/serializers.py``,
+    applied in the other direction: DRF's
     inference from the model is a feature, and declaring a field throws it away.
     """
 

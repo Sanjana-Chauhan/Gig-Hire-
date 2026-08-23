@@ -7,7 +7,7 @@ class ApplicationStatus(models.TextChoices):
     """The lifecycle of a supplier's application to a gig.
 
     Business rule 6 declares ``ACCEPTED`` and ``REJECTED`` terminal. The
-    specification is silent on ``WITHDRAWN`` (ambiguity A12), but the same
+    specification is silent on ``WITHDRAWN`` (interpretation I2), but the same
     reasoning applies: a withdrawn application is a completed decision, and
     withdrawing twice is not a meaningful operation.
 
@@ -32,7 +32,8 @@ class ContractStatus(models.TextChoices):
     non-terminated" contracts, so the rule itself refers to the state. No
     endpoint in the specification can produce it, however -- there is no
     terminate action. It is therefore currently unreachable through the API,
-    recorded as gap G4 in DECISIONS.md, and deliberately *not* given an invented
+    recorded as open question Q2 in DECISIONS.md, and deliberately *not* given an
+    invented
     endpoint: implementing a feature the specification never asked for is a
     worse failure than reporting the gap.
     """

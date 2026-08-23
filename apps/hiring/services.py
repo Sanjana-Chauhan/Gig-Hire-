@@ -97,7 +97,7 @@ def accept_application(*, application: Application) -> Contract:
     4. the gig moves to ``in_progress``.
 
     Guards, in order: the application must still be pending (rule 6), the gig
-    must still be open (ambiguity A10), the supplier must not be ``inactive``
+    must still be open (interpretation I6), the supplier must not be ``inactive``
     (rule 5), and the supplier must be under the workload cap (rule 4).
 
     Structure worth noting: **every guard runs before every write.** The
@@ -208,7 +208,7 @@ def _reject_competing_applications(*, gig: Gig, accepted: Application) -> int:
     Scope is limited to *this* gig. The accepted supplier's pending applications
     on other gigs are untouched: rule 3 says "every other pending application
     for that gig", and a supplier may legitimately still be in the running
-    elsewhere (ambiguity A2).
+    elsewhere (interpretation I5).
     """
     return (
         Application.objects.filter(gig=gig, status=ApplicationStatus.PENDING)
@@ -228,7 +228,8 @@ def reject_application(*, application: Application) -> Application:
     * rejecting is the *creator* declining a bid,
     * withdrawing is the *supplier* pulling out.
 
-    Once authentication exists (gap G3) they diverge completely: one authorises
+    Once authentication exists (open question Q1) they diverge completely: one
+    authorises
     against ``application.gig.creator``, the other against
     ``application.supplier``. Merging them now would produce a shared function
     that immediately needs a branch on who is calling, and a parameterised
@@ -238,8 +239,8 @@ def reject_application(*, application: Application) -> Application:
 
     What *is* shared -- the pending guard -- is shared, as a named function.
 
-    Note there is deliberately no requirement that the gig be open. The spec is
-    silent (ambiguity A25), and blocking rejection on a cancelled gig would
+    Note there is deliberately no requirement that the gig be open. The
+    specification is silent, and blocking rejection on a cancelled gig would
     strand its pending applications in ``pending`` forever with no way to close
     them out. Rejection is always a legitimate way to finish a live bid.
     """
@@ -280,8 +281,8 @@ def withdraw_application(*, application: Application) -> Application:
 # ---------------------------------------------------------------------------
 # Each rule is one named function. That is not ceremony: it means the rule has a
 # name that matches how the business talks about it, the accept flow reads as a
-# list of rules rather than a wall of conditionals, and reject/withdraw (Step 7)
-# reuse the same guards instead of restating them slightly differently.
+# list of rules rather than a wall of conditionals, and reject and withdraw reuse
+# the same guards instead of restating them slightly differently.
 
 
 def _assert_application_is_pending(application: Application) -> None:
@@ -313,11 +314,14 @@ def _assert_gig_accepts_hiring(gig: Gig) -> None:
 def _assert_supplier_is_hireable(supplier: Supplier) -> None:
     """Business rule 5: availability is checked at accept-time.
 
-    Deliberately permissive about ``busy``: the rule names only ``inactive``.
-    A busy supplier can be hired. That reads like a product error and is flagged
-    as such (ambiguity A3), but it is what the specification says, and quietly
-    "fixing" it here would make the implementation disagree with the document
-    it is being measured against.
+    Deliberately permissive about ``busy``: the rule names only ``inactive``, so
+    this guard lets a busy supplier through rather than quietly widening the
+    rule and disagreeing with the document being measured against.
+
+    They are still not hireable. Under interpretation I3 ``busy`` *means* "at
+    the three-agreement cap", so ``_assert_under_workload_cap`` refuses them a
+    moment later with a message naming the actual reason. Rule 5 stays literal
+    and the outcome is still correct.
     """
     if not supplier.is_hireable:
         raise ConflictError(
@@ -371,8 +375,8 @@ def complete_contract(*, contract: Contract) -> Contract:
     the same reasoning as rule 6's terminal states.
 
     Note what this deliberately does **not** do: it does not touch the gig.
-    Ambiguity A9 was initially interpreted as "completing the contract completes
-    the gig", and that was revised in Step 8. The specification names
+    This was first read as "completing the contract completes the gig", then
+    revised (interpretation I8 in DECISIONS.md). The specification names
     ``in_progress -> completed`` as an allowed PATCH transition on the gig, so
     auto-completing here would make the spec's own example unreachable. Finishing
     a job is therefore two explicit steps: complete the contract, then complete
@@ -409,7 +413,7 @@ def create_review(*, contract: Contract, reviewer_type: str, rating: int, commen
     may be only one review per ``reviewer_type`` per contract.
 
     The completed-only rule means a ``terminated`` contract can never be
-    reviewed -- flagged as ambiguity A15, since a real platform very much wants
+    reviewed -- raised as open question Q3, since a real platform very much wants
     feedback on work that went wrong. Implemented as specified rather than
     quietly widened.
 

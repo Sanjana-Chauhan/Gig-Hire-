@@ -15,9 +15,9 @@ class ContractFilterSet(django_filters.FilterSet):
     a gig which has a creator. ``gig__creator_id`` expresses that as a join
     rather than requiring a denormalised column.
 
-    With **neither** parameter the endpoint returns every contract, paginated
-    (ambiguity A14). That is the conventional REST reading, and it is worth
-    stating plainly what it means in the absence of authentication (gap G3):
+    With **neither** parameter the endpoint returns every contract, paginated.
+    That is the conventional REST reading, and it is worth stating plainly what
+    it means in the absence of authentication (open question Q1 in DECISIONS.md):
     every rate every supplier ever agreed to is readable by anyone. Faithful to
     the spec, and not something to ship -- see DECISIONS.md.
 
@@ -25,7 +25,8 @@ class ContractFilterSet(django_filters.FilterSet):
     malformed request and returns 400, while a numeric id that matches nothing
     returns an empty page with 200. Those are genuinely different answers --
     "your request is wrong" versus "this supplier has no contracts" -- and
-    collapsing them is the bug class from Step 4.
+    collapsing them is the bug class the gig status filter avoids the same way --
+    see ``apps/gigs/filters.py``.
     """
 
     supplier_id = django_filters.NumberFilter(

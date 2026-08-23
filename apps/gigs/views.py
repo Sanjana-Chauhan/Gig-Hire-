@@ -31,9 +31,10 @@ class GigViewSet(viewsets.ModelViewSet):
     query. If a nested creator representation is ever added, it must be added
     together with ``select_related`` -- nesting alone turns one query into N+1.
 
-    The delete guard for business rule 7 (a gig with an active contract must not
-    be deletable) is not here yet: contracts do not exist until Step 6. It lands
-    in Step 8 alongside the status state machine and field immutability.
+    The delete guard for business rule 7 (a gig with an agreement must not be
+    deletable) is in ``perform_destroy`` below, and the status state machine and
+    field immutability rules are applied in ``perform_update``. Both delegate to
+    ``apps/gigs/transitions.py`` rather than deciding anything here.
     """
 
     queryset = Gig.objects.all()

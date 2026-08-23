@@ -161,7 +161,8 @@ class Contract(TimeStampedModel):
         # Business rule 7 says deleting a gig "must not cascade-delete the
         # contract or its reviews". CASCADE would do exactly that, and the loss
         # would be a financial and reputation record -- unrecoverable. The
-        # database refusing is the guarantee; the API's 409 (Step 8) is the
+        # database refusing is the guarantee; the API's 409 (raised in
+        # apps/gigs/transitions.py) is the
         # good error message on top of it.
     )
     supplier = models.ForeignKey(

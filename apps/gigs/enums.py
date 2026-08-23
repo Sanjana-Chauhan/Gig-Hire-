@@ -14,8 +14,9 @@ class GigStatus(models.TextChoices):
     contract, and every rule that reasons about in-progress gigs -- including
     rule 7's delete guard -- would be quietly bypassable.
 
-    The full transition table is defined in Step 8, where the specification's
-    silence on which transitions are legal has to be resolved (ambiguity A6).
+    The full transition table lives in ``apps/gigs/transitions.py``, where the
+    specification's silence on which of the sixteen transitions are legal is
+    resolved (interpretation I7 in DECISIONS.md).
     """
 
     OPEN = "open", "Open"

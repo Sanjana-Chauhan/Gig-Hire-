@@ -54,7 +54,7 @@ class Gig(TimeStampedModel):
 
         Named as a business question rather than a status comparison, so callers
         read as rules. Business rule 1 (only open gigs accept applications) and
-        the accept guard (ambiguity A10) both ask exactly this, and both should
+        the accept guard (interpretation I6) both ask exactly this, and both should
         change together if the definition ever widens.
         """
         return self.status == GigStatus.OPEN
@@ -79,7 +79,8 @@ class Gig(TimeStampedModel):
         """Whether any contract has ever existed for this gig.
 
         Distinct from has_active_contract, and the distinction is the whole of
-        ambiguity A5. Rule 7 only forbids deleting a gig with an *active*
+        deviation S1 in DECISIONS.md. Rule 7 only forbids deleting a gig with an
+        *active*
         contract -- read literally, a gig whose contract has been completed is
         deletable, which would cascade away that contract and its reviews.
         Since Contract.gig is PROTECT, that cascade cannot actually happen; this

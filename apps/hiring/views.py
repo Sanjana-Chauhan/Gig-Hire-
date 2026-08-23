@@ -66,12 +66,13 @@ class AcceptApplicationView(APIView):
     Returns **201 with the created Contract**, not the updated application. A
     new resource genuinely came into existence, and the contract id is what the
     caller needs next -- returning the application would force a second request
-    to find it. The specification does not state a response shape; recorded as
-    A24 in DECISIONS.md.
+    to find it. The specification does not state a response shape; the choice is
+    recorded in DECISIONS.md.
 
     No request body: the application id in the URL identifies everything needed.
     Note that without authentication there is nothing here to verify the caller
-    is the gig's creator (gap G3) -- the endpoint trusts whoever calls it, which
+    is the gig's creator (open question Q1) -- the endpoint trusts whoever calls
+    it, which
     is the single largest gap between this implementation and a real one.
     """
 
@@ -129,8 +130,8 @@ class CompleteContractView(APIView):
     """``POST /api/contracts/{contract_id}/complete/`` -- mark work finished.
 
     Returns 200 with the updated contract. Note this does not complete the gig:
-    that is a separate PATCH, gated on no active contract remaining. See the
-    revision of ambiguity A9 in DECISIONS.md.
+    that is a separate PATCH, gated on no active contract remaining. See
+    interpretation I8 in DECISIONS.md.
     """
 
     def post(self, request, contract_id: int) -> Response:

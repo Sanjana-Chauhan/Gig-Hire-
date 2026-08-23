@@ -2,8 +2,8 @@
 
 Business rule 8 says that once a gig leaves ``open``, only status transitions are
 allowed -- and gives two examples out of roughly twelve possible transitions.
-The rest is ambiguity A6, resolved here as an explicit table rather than left to
-whatever the code happens to permit.
+The rest is interpretation I7 in DECISIONS.md, resolved here as an explicit table
+rather than left to whatever the code happens to permit.
 
 Why a table instead of scattered ``if`` statements: the set of legal moves is the
 single most important thing to be able to *read* about a state machine. A table
@@ -114,9 +114,10 @@ def assert_gig_deletable(*, gig) -> None:
       PROTECT precisely so it cannot. This check turns the database's refusal
       into a clean 409 with an explanation instead of a generic integrity error.
 
-    Recorded as ambiguity A5, with the recommendation that gigs be soft-deleted
-    rather than removed. Applications are unaffected -- they cascade, because a
-    bid carries no money and no reputation (A23).
+    Recorded as deviation S1 in DECISIONS.md, with the recommendation that gigs
+    be soft-deleted rather than removed. Applications are unaffected -- they
+    cascade, because a bid carries no money and no reputation (interpretation
+    I14).
     """
     if gig.has_active_contract:
         raise ConflictError(
